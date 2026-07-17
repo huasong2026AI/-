@@ -7,13 +7,11 @@ import requests
 import streamlit as st
 
 # ================= 开发者配置区域 =================
-# 🔒 终极安全：Key 和卡密统统不写死，全部从 Streamlit 云端 Secrets 中安全读取
 if "DEEPSEEK_API_KEY" in st.secrets:
     MY_OWN_DEEPSEEK_KEY = st.secrets["DEEPSEEK_API_KEY"]
 else:
     MY_OWN_DEEPSEEK_KEY = "暂未配置云端KEY"
 
-# 从云端安全读取当前有效的卡密列表（云端配置时用英文逗号分隔）
 if "VALID_CARD_KEYS" in st.secrets:
     VALID_CARD_KEYS = [k.strip() for k in st.secrets["VALID_CARD_KEYS"].split(",")]
 else:
@@ -22,7 +20,6 @@ else:
 
 API_URL = "https://api.deepseek.com/v1/chat/completions"
 
-# 设置页面属性
 st.set_page_config(page_title="和风·日语多读绘本批翻大师", page_icon="🌸", layout="wide")
 
 # ================= 👘 日式高级感和风 CSS 注入 =================
@@ -41,7 +38,6 @@ st.markdown("""
         color: #FFFFFF !important;
     }
     
-    /* 侧边栏里的所有文字颜色适配 */
     [data-testid="stSidebar"] p, [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3, [data-testid="stSidebar"] label {
         color: #EAEAEA !important;
     }
@@ -64,14 +60,14 @@ st.markdown("""
         font-style: italic;
     }
     
-    /* 卡片区域美化 */
-    .section-card {
+    /* 用 Streamlit 原生 container 样式实现高级白卡片，彻底避免多余白条 */
+    div[data-testid="stVerticalBlock"] > div:has(div[data-testid="stVerticalBlock"]) {
         background-color: #FFFFFF;
-        padding: 25px;
+        padding: 10px 20px;
         border-radius: 8px;
         box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
         border-left: 5px solid #1B365D;
-        margin-bottom: 25px;
+        margin-bottom: 15px;
     }
     
     /* 朱红色核心按钮样式定制 */
@@ -96,12 +92,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 初始化 Session 状态用于缓存翻译结果
 if "translated_files" not in st.session_state:
     st.session_state.translated_files = {}
 
 def call_deepseek(api_key, prompt, text):
-    """底层请求函数：强行采用 UTF-8 字节流发送数据，彻底杜绝 latin-1 报错"""
     headers = {
         "Content-Type": "application/json; charset=utf-8",
         "Authorization": f"Bearer {api_key}"
@@ -151,7 +145,6 @@ else:
     st.sidebar.markdown("🙋‍♂️ **没有 Key 和卡密？**")
     st.sidebar.markdown("为了保护隐私，本站不公开微信。如果您想体验内置额度，请点击下方按钮留下您的联系方式，作者看到后会使用微信小号主动联系您发放卡密！")
     
-    # 🔗 已经无缝接入你生成的专属腾讯文档表单链接
     form_link = "https://docs.qq.com/form/page/DTW1TVUZMYnFLWlhX" 
     
     st.sidebar.markdown(f"""
@@ -180,104 +173,100 @@ else:
 
 # --- 📦 主界面业务逻辑 ---
 
-# 第一步：文件上传卡片（用 <div class="section-card"> 将上传组件完整包裹起来）
-st.markdown('<div class="section-card">', unsafe_allow_html=True)
-st.subheader("📥 第一步：上传需要处理的 PDF 绘本")
-uploaded_files = st.file_uploader(
-    "从电脑选择一本或多本 PDF 绘本拖拽到下方（支持批量上传）", 
-    type=["pdf"], 
-    accept_multiple_files=True
-)
-st.markdown('</div>', unsafe_allow_html=True)
+# 第一步：使用 Streamlit 原生容器包裹，杜绝空白卡片现象
+with st.container():
+    st.subheader("📥 第一步：上传需要处理的 PDF 绘本")
+    uploaded_files = st.file_uploader(
+        "从电脑选择一本或多本 PDF 绘本拖拽到下方（支持批量上传）", 
+        type=["pdf"], 
+        accept_multiple_files=True
+    )
 
-# 第二步：批量翻译卡片（确保 <div class="section-card"> 只在有文件上传成功时，才在 if 内部渲染包裹）
+# 第二步：批量翻译卡片
 if uploaded_files:
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    st.info(f"📁 已成功载入 {len(uploaded_files)} 个 PDF 文件。")
-    st.subheader("🚀 第二步：开始批量流水线翻译")
-    
-    start_btn = st.button("🔥 点击开始批量处理")
-    
-    if start_btn:
-        if not final_api_key or final_api_key == "暂未配置云端KEY":
-            st.error("🔒 启动失败：请先在左侧栏配置您的【API Key】或填入有效的【激活卡密】！")
-        else:
-            # 清空上一轮缓存
-            st.session_state.translated_files = {}
-            
-            for file_idx, file_obj in enumerate(uploaded_files):
-                st.markdown(f"### 📖 正在处理 ({file_idx+1}/{len(uploaded_files)}): `{file_obj.name}`")
+    with st.container():
+        st.info(f"📁 已成功载入 {len(uploaded_files)} 个 PDF 文件。")
+        st.subheader("🚀 第二步：开始批量流水线翻译")
+        
+        start_btn = st.button("🔥 点击开始批量处理")
+        
+        if start_btn:
+            if not final_api_key or final_api_key == "暂未配置云端KEY":
+                st.error("🔒 启动失败：请先在左侧栏配置您的【API Key】或填入有效的【激活卡密】！")
+            else:
+                st.session_state.translated_files = {}
                 
-                try:
-                    with pdfplumber.open(file_obj) as pdf:
-                        total_pages = len(pdf.pages)
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-                        
-                        file_results = []
-                        
-                        for i, page in enumerate(pdf.pages):
-                            page_num = i + 1
-                            status_text.text(f"正在提取并分析第 {page_num}/{total_pages} 页...")
+                for file_idx, file_obj in enumerate(uploaded_files):
+                    st.markdown(f"### 📖 正在处理 ({file_idx+1}/{len(uploaded_files)}): `{file_obj.name}`")
+                    
+                    try:
+                        with pdfplumber.open(file_obj) as pdf:
+                            total_pages = len(pdf.pages)
+                            progress_bar = st.progress(0)
+                            status_text = st.empty()
                             
-                            raw_text = page.extract_text()
-                            if not raw_text or not raw_text.strip():
-                                progress_bar.progress(page_num / total_pages)
-                                continue
+                            file_results = []
+                            
+                            for i, page in enumerate(pdf.pages):
+                                page_num = i + 1
+                                status_text.text(f"正在提取并分析第 {page_num}/{total_pages} 页...")
                                 
-                            prompt = (
-                                "你是一个精通中日双语的儿童绘本翻译专家。\n"
-                                "输入的内容是从带有汉字注音（振假名）的日语绘本中直接提取出的文本。\n"
-                                "由于提取原因，汉字头顶的微小假名可能混在了正文里（例如：友（とも）动词は，或者断行错乱）。\n"
-                                "请你完成两件事：\n"
-                                "1. 帮我理顺语序，剔除多余的注音干扰，还原出原本干净的日语正文。\n"
-                                "2. 将其翻译成富有童趣、生动、符合中国儿童阅读习惯的中文。\n\n"
-                                "请严格按照以下格式回复，不要带有任何其他解释：\n"
-                                f"【第 {page_num} 页】\n"
-                                "日语原文：[这里填写还原后的干净日语]\n"
-                                "中文翻译：[这里填写翻译的中文]"
-                            )
+                                raw_text = page.extract_text()
+                                if not raw_text or not raw_text.strip():
+                                    progress_bar.progress(page_num / total_pages)
+                                    continue
+                                    
+                                prompt = (
+                                    "你是一个精通中日双语的儿童绘本翻译专家。\n"
+                                    "输入的内容是从带有汉字注音（振假名）的日语绘本中直接提取出的文本。\n"
+                                    "由于提取原因，汉字头顶的微小假名可能混在了正文里（例如：友（とも）动词は，或者断行错乱）。\n"
+                                    "请你完成两件事：\n"
+                                    "1. 帮我理顺语序，剔除多余的注音干扰，还原出原本干净的日语正文。\n"
+                                    "2. 将其翻译成富有童趣、生动、符合中国儿童阅读习惯的中文。\n\n"
+                                    "请严格按照以下格式回复，不要带有任何其他解释：\n"
+                                    f"【第 {page_num} 页】\n"
+                                    "日语原文：[这里填写还原后的干净日语]\n"
+                                    "中文翻译：[这里填写翻译的中文]"
+                                )
+                                
+                                try:
+                                    page_result = call_deepseek(final_api_key, prompt, raw_text)
+                                    file_results.append(page_result)
+                                except Exception as page_err:
+                                    st.warning(f"⚠️ 第 {page_num} 页翻译失败: {page_err}")
+                                
+                                progress_bar.progress(page_num / total_pages)
                             
-                            try:
-                                page_result = call_deepseek(final_api_key, prompt, raw_text)
-                                file_results.append(page_result)
-                            except Exception as page_err:
-                                st.warning(f"⚠️ 第 {page_num} 页翻译失败: {page_err}")
+                            status_text.text(f"✨ `{file_obj.name}` 翻译处理完毕！")
                             
-                            progress_bar.progress(page_num / total_pages)
-                        
-                        status_text.text(f"✨ `{file_obj.name}` 翻译处理完毕！")
-                        
-                        if file_results:
-                            txt_filename = f"{os.path.splitext(file_obj.name)[0]}_翻译结果.txt"
-                            st.session_state.translated_files[txt_filename] = "\n\n".join(file_results)
-                            st.success(f"已就绪: `{txt_filename}`")
-                            
-                except Exception as pdf_err:
-                    st.error(f"❌ 解析该 PDF 文件失败: {pdf_err}")
-                st.markdown("---")
-            
-            st.balloons()
-            st.success("🎉 所有上传的绘本已全部在云端流水线处理完毕！")
-    st.markdown('</div>', unsafe_allow_html=True)
+                            if file_results:
+                                txt_filename = f"{os.path.splitext(file_obj.name)[0]}_翻译结果.txt"
+                                st.session_state.translated_files[txt_filename] = "\n\n".join(file_results)
+                                st.success(f"已就绪: `{txt_filename}`")
+                                
+                    except Exception as pdf_err:
+                        st.error(f"❌ 解析该 PDF 文件失败: {pdf_err}")
+                    st.markdown("---")
+                
+                st.balloons()
+                st.success("🎉 所有上传的绘本已全部在云端流水线处理完毕！")
 
 # 第三步：结果打包与下载卡片
 if st.session_state.translated_files:
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    st.subheader("🎁 第三步：一键打包下载结果")
-    
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        for txt_name, txt_content in st.session_state.translated_files.items():
-            zip_file.writestr(txt_name, txt_content.encode('utf-8'))
-            
-    zip_buffer.seek(0)
-    
-    st.download_button(
-        label="📥 点击一键下载全部翻译结果 (ZIP压缩包)",
-        data=zip_buffer,
-        file_name="绘本批量翻译结果.zip",
-        mime="application/zip",
-        use_container_width=True
-    )
-    st.markdown('</div>', unsafe_allow_html=True)
+    with st.container():
+        st.subheader("🎁 第三步：一键打包下载结果")
+        
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for txt_name, txt_content in st.session_state.translated_files.items():
+                zip_file.writestr(txt_name, txt_content.encode('utf-8'))
+                
+        zip_buffer.seek(0)
+        
+        st.download_button(
+            label="📥 点击一键下载全部翻译结果 (ZIP压缩包)",
+            data=zip_buffer,
+            file_name="绘本批量翻译结果.zip",
+            mime="application/zip",
+            use_container_width=True
+        )
